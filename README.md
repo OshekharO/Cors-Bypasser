@@ -20,21 +20,28 @@ Simply append the target URL as a query parameter:
 
 Send a JSON object in the body of the request with url and headers properties:
 
-`fetch('https://simple-cors-proxy.vercel.app/fetchdata', {
-    method: 'POST',
-    headers: {
-        'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ url: YOUR_URL_HERE, headers: YOUR_HEADERS_HERE })
-})
-.then(response => response.json())
-.then(data => {
-    // Handle the data here
-})
-.catch(error => {
-    console.error(error);
-});`
+```javascript
+function check(code) {
+    const targetUrl = `https://securepayment.zee5.com/paymentGateway/coupon/verification?coupon_code=${code}&country_code=IN&translation=en`;
+    const proxyUrl = 'https://simple-cors-proxy.vercel.app/fetchdata';
+    const headers = {
+        'Referer': 'https://b2bapi.zee5.com/',
+        'Origin': 'https://b2bapi.zee5.com'
+    }
+    const body = {
+        'coupon_code': code,
+        'country_code': 'IN',
+        'translation': 'en'
+    }
 
-### 🎓 Educational Purposes Only
-
-This project is intended for educational purposes only. Ensure your usage of APIs complies with their terms and policies.
+    return fetch(proxyUrl, { 
+            method: 'POST', 
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ url: targetUrl, headers: headers, body: body })
+        })
+        .then(response => {
+            return {status: response.status, data: response.json()};
+        });
+}```
