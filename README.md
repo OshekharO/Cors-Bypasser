@@ -1,4 +1,4 @@
-# 🔀 Simple CORS Proxy
+# 🔀 CORS Proxy
 
 ## 🚀 Features
 
