@@ -1,0 +1,121 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Zee5 Voucher Code Checker</title>
+    <link rel="canonical" href="https://uncoder.eu.org/hoichoi/" />
+  <meta name="robots" content="index, follow">
+  <meta name="author" content="OshekharO">
+  <meta name="copyright" content="Copyright © 2023 OshekharO">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+  body {
+    font-size: 14px;
+    line-height: 1.6;
+    color: #616370;
+    background: #26272c;
+    height: 100%;
+    position: relative;
+    margin: 1.5rem;
+   }
+    </style>
+</head>
+<body class="bg-dark text-light">
+    <div class="container py-2">
+        <h1 class="text-center mb-5">Zee5 Code Checker</h1>
+        <form id="form">
+            <div class="form-group">
+                <label for="codes" class="fs-6 font-monospace badge bg-danger mb-2">Voucher Codes</label>
+                
+                <textarea class="form-control" id="codes" rows="10" placeholder="Z5FKOC1YI45H"></textarea>
+            </div>
+            <div class="d-grid gap-2 d-md-flex justify-content-md-center mt-3">
+                <button type="button" onclick="checkCodes()" class="btn btn-outline-success">START</button>
+                <button type="button" id="stop" class="btn btn-outline-danger" disabled>STOP</button>
+            </div>
+            <div class="alert alert-success mt-3" id="valid-codes">
+                <h3 class="font-monospace">Valid - <span id="valid-count" class="badge bg-success">0</span></h3>
+                <div id="valid-results"></div>
+            </div>
+            <div class="alert alert-danger mt-3" id="invalid-codes">
+                <h3 class="font-monospace">Invalid - <span id="invalid-count" class="badge bg-danger">0</span></h3>
+                <div id="invalid-results"></div>
+            </div>
+        </form>
+    </div>
+    <script>
+    function generateCodes(count) {
+    const codes = [];
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    for (let i = 0; i < count; i++) {
+        let code = 'Z5FKOC1Y';
+        for (let j = 0; j < 4; j++) {
+            code += characters[Math.floor(Math.random() * characters.length)];
+        }
+        codes.push(code);
+    }
+    return codes;
+}
+
+function checkVoucher(code) {
+    const url = 'https://simple-cors-proxy.vercel.app/proxy?url=https://securepayment.zee5.com/paymentGateway/coupon/verification?coupon_code=${code}&country_code=IN&translation=en';
+    const headers = {
+        'Referer': 'https://b2bapi.zee5.com/',
+        'Origin': 'https://b2bapi.zee5.com',
+        'X-Access-Token': 'eyJ0eXAiOiJqd3QiLCJhbGciOiJIUzI1NiJ9.eyJwcm9kdWN0X2NvZGUiOiJ6ZWU1QDk3NSIsInBsYXRmb3JtX2NvZGUiOiJXZWJAJCF0Mzg3MTIiLCJpc3N1ZWRBdCI6IjIwMjMtMDUtMTVUMTg6MzA6MDIrMDAwMCIsInR0bCI6ODY0MDB9.PYc2AZxH9xWHHjyRg2RTnj7WnjRKAF6atJF73gv6rsk',
+        'Accept': '*/*',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-site',
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 12; RMX2170) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Mobile Safari/537.36',
+        'sec-ch-ua-platform': 'Android',
+        'sec-ch-ua-mobile': '?1',
+        'sec-ch-ua': 'Chromium";v="105", "Not)A;Brand";v="8'
+    }
+    const body = {
+        'coupon_code': code,
+        'country_code': 'IN',
+        'translation': 'en'
+    }
+
+    return fetch(url, { method: 'POST', headers, body: JSON.stringify(body) })
+        .then(response => {
+            return {status: response.status, data: response.json()};
+        });
+}
+
+function checkCodes() {
+    let codes = document.getElementById('codes').value.split('\n');
+    const validElement = document.getElementById('valid-results');
+    const invalidElement = document.getElementById('invalid-results'); 
+    validElement.textContent = '';
+
+    if (codes[0] === '') {  // If no codes provided, generate 100 codes
+        codes = generateCodes(50);
+    }
+codes.forEach(code => {
+            checkVoucher(code.trim())
+                .then(response => {
+                    response.data.then(data => {
+                        if(data.code !== 1){
+                            validElement.textContent += `Code: ${code} - Response Body: ${JSON.stringify(data)}\n`;
+                            document.getElementById('valid-count').textContent = Number(document.getElementById('valid-count').textContent) + 1;
+                        }else{
+                            invalidElement.textContent += `Code: ${code} - Response Body: ${JSON.stringify(data)}\n`;
+                            document.getElementById('invalid-count').textContent = Number(document.getElementById('invalid-count').textContent) + 1;
+                        }
+                    })
+                })
+                .catch(() => {
+                    document.getElementById('invalid-count').textContent = Number(document.getElementById('invalid-count').textContent) + 1;
+                })
+        })
+    }
+    
+    </script>
+</body>
+</html>
