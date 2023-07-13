@@ -2,7 +2,7 @@
 
 ## 🚀 Features
 
-- 🔎 GET and POST requests to any URL
+- 🔎 GET and POST requests
 - 🛠 Bypasses CORS restrictions
 - 📨 Includes headers in the request
 - 🚦 Handles CORS preflight requests
