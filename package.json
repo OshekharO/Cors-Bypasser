@@ -1,0 +1,14 @@
+{
+  "name": "simple-cors-proxy",
+  "version": "1.0.0",
+  "description": "A simple CORS proxy server",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.17.1",
+    "cors": "^2.8.5",
+    "axios": "^0.21.1"
+  }
+}
