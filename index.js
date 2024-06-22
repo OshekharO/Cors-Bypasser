@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
+const http2 = require('http2');
 
 const app = express();
 app.use(cors());
@@ -36,7 +37,8 @@ app.all('/fetchdata', async (req, res) => {
   }
 });
 
+const server = http2.createServer(app);
 const port = process.env.PORT || 3000;
-app.listen(port, () => {
+server.listen(port, () => {
   console.log(`CORS proxy server running on http://localhost:${port}`);
 });
