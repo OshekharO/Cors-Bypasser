@@ -33,6 +33,7 @@ app.all('/fetchdata', async (req, res) => {
       message: errorMessage,
       status: 'error',
       statusCode,
+      error: error.response?.data,
     });
   }
 });
