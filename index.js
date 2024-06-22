@@ -7,25 +7,27 @@ app.use(cors());
 app.use(express.json());
 
 app.all('/fetchdata', async (req, res) => {
+  const { url, method = 'GET', headers = {}, body = {} } = req.query;
+
+  if (!url || typeof url !== 'string') {
+    return res.status(400).send({ message: 'Invalid URL', status: 'error', statusCode: 400 });
+  }
+
   try {
-    const { url, method, headers, body } = req.body;
-    
-    // Make the request to the target URL
     const response = await axios({
       url,
-      method: method || 'GET',
-      headers: headers || {},
-      data: body || {},
+      method,
+      headers: Object.keys(headers).reduce((acc, key) => ({ ...acc, [key]: headers[key] }), {}),
+      data: body,
     });
-    
-    // Forward the response back to the client
+
     res.send(response.data);
   } catch (error) {
     console.error('Error occurred:', error.message);
-    
-    // Handle any errors and send an error response
+
     const statusCode = error.response?.status || 500;
     const errorMessage = error.message || 'Internal Server Error';
+
     res.status(statusCode).send({
       message: errorMessage,
       status: 'error',
