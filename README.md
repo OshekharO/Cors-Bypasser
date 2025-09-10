@@ -2,23 +2,52 @@
 
 ## 🚀 Features
 
-- 🔎 GET and POST requests
-- 🛠 Bypasses CORS restrictions
-- 📨 Includes headers in the request
-- 🚦 Handles CORS preflight requests
-- 🖥 Built with Express.js
+- 🔎 Supports **GET** and **POST** requests
+- 🛠 Bypasses **CORS restrictions**
+- 📨 Allows **custom headers and body**
+- 🚦 Handles **CORS preflight requests**
+- 🌐 Accepts **headers/body via query string or JSON body**
+- 🖥 Built with **Express.js + Axios**
+
+---
 
 ## 📚 Usage
 
-### GET Requests 📩
+### 1️⃣ GET Requests 📩
 
 Simply append the target URL as a query parameter:
 
-`https://cors-bypasser-gilt.vercel.app/fetchdata?url=YOUR_URL_HERE`
+```bash
+https://cors-bypasser-gilt.vercel.app/fetchdata?url=YOUR_URL_HERE
+```
 
-### POST Requests 📤
+Example:
 
-Send a JSON object in the body of the request with url and headers properties:
+```bash
+curl "https://cors-bypasser-gilt.vercel.app/fetchdata?url=https://jsonplaceholder.typicode.com/todos/1"
+```
+
+---
+
+### 2️⃣ GET with Headers in Query
+
+```bash
+curl "https://cors-bypasser-gilt.vercel.app/fetchdata?url=https://httpbin.org/headers&headers={\"X-Test\":\"123\"}"
+```
+
+---
+
+### 3️⃣ POST with Query Parameters 📤
+
+```bash
+curl "https://cors-bypasser-gilt.vercel.app/fetchdata?url=https://httpbin.org/post&method=POST&body={\"foo\":\"bar\"}"
+```
+
+---
+
+### 4️⃣ POST with JSON Body (Recommended) 📤
+
+Send a JSON object in the body of the request with **url**, **headers**, and **body** properties:
 
 ```javascript
 function check(code) {
@@ -27,21 +56,26 @@ function check(code) {
     const headers = {
         'Referer': 'https://b2bapi.zee5.com/',
         'Origin': 'https://b2bapi.zee5.com'
-    }
+    };
     const body = {
         'coupon_code': code,
         'country_code': 'IN',
         'translation': 'en'
-    }
+    };
 
-    return fetch(proxyUrl, { 
+    return fetch(proxyUrl + '?method=POST', { 
             method: 'POST', 
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({ url: targetUrl, headers: headers, body: body })
         })
-        .then(response => {
-            return {status: response.status, data: response.json()};
-        });
+        .then(response => response.json())
+        .then(data => ({ status: 200, data }))
+        .catch(err => ({ status: 500, error: err.message }));
 }
+```
+
+---
+
+✅ Now you can use this proxy to bypass CORS for **any API request** safely and flexibly.
