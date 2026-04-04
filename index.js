@@ -1,15 +1,18 @@
 'use strict';
 
+const http    = require('node:http');
+const https   = require('node:https');
 const express = require('express');
-const cors = require('cors');
+const cors    = require('cors');
 
 const app = express();
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-const TIMEOUT_MS = 30_000;
-const MAX_BODY    = '1mb';
-const ALLOWED_METHODS  = new Set(['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD']);
-const SAFE_PROTOCOLS   = new Set(['http:', 'https:']);
+const TIMEOUT_MS    = 30_000;
+const MAX_BODY      = '1mb';
+const MAX_REDIRECTS = 5;
+const ALLOWED_METHODS = new Set(['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD']);
+const SAFE_PROTOCOLS  = new Set(['http:', 'https:']);
 
 // SSRF protection: block private / link-local / loopback address ranges
 const PRIVATE_RANGES = [
@@ -65,7 +68,7 @@ app.use(express.urlencoded({ extended: false, limit: MAX_BODY }));
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-// Headers that must not be forwarded to / from upstream (RFC 7230 §6.1)
+// Headers that must not be forwarded to/from upstream (RFC 7230 §6.1)
 const HOP_BY_HOP = new Set([
   'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
   'te', 'trailer', 'transfer-encoding', 'upgrade',
@@ -79,11 +82,6 @@ function sanitizeHeaders(headers) {
   }
   return out;
 }
-
-const FORWARD_RES_HEADERS = [
-  'content-type', 'cache-control', 'etag', 'last-modified',
-  'location', 'set-cookie', 'expires', 'vary',
-];
 
 function clientIp(req) {
   return String(req.headers['x-forwarded-for'] ?? req.socket?.remoteAddress ?? '')
@@ -140,6 +138,78 @@ function parseRequest(req) {
   return { url, method: (method || req.method).toUpperCase(), headers, body };
 }
 
+// ── Upstream HTTP client (node:http/https for maximum TLS compatibility) ───────
+// Using the built-in http/https modules instead of native fetch avoids strict
+// undici TLS behaviour that rejects servers with incomplete certificate chains.
+function upstreamFetch(initialUrl, initialMethod, reqHeaders, reqBody) {
+  return new Promise((resolve, reject) => {
+    let redirectsLeft = MAX_REDIRECTS;
+    let method = initialMethod;
+    let body   = reqBody;
+
+    function attempt(url) {
+      // Validate every hop (catches SSRF via open redirect)
+      let validUrl;
+      try { validUrl = validateUrl(url); } catch (e) { return reject(e); }
+
+      const urlObj  = new URL(validUrl);
+      const isHttps = urlObj.protocol === 'https:';
+      const mod     = isHttps ? https : http;
+      const port    = urlObj.port ? Number(urlObj.port) : (isHttps ? 443 : 80);
+
+      const options = {
+        hostname : urlObj.hostname,
+        port,
+        path     : (urlObj.pathname || '/') + urlObj.search,
+        method,
+        headers  : reqHeaders,
+      };
+
+      const timer = setTimeout(() => {
+        req.destroy();
+        const e = new Error('Upstream request timed out.');
+        e.name  = 'TimeoutError';
+        reject(e);
+      }, TIMEOUT_MS);
+
+      const req = mod.request(options, (res) => {
+        const { statusCode, headers: resHeaders } = res;
+
+        if (
+          [301, 302, 303, 307, 308].includes(statusCode) &&
+          resHeaders.location &&
+          redirectsLeft-- > 0
+        ) {
+          res.resume(); // discard redirect body
+          clearTimeout(timer);
+          // RFC 7231: 303 always becomes GET; 301/302 should too for non-GET
+          if (statusCode === 303 || ((statusCode === 301 || statusCode === 302) && method !== 'GET' && method !== 'HEAD')) {
+            method = 'GET';
+            body   = undefined;
+          }
+          attempt(new URL(resHeaders.location, validUrl).href);
+          return;
+        }
+
+        const chunks = [];
+        res.on('data', chunk => chunks.push(chunk));
+        res.on('end', () => {
+          clearTimeout(timer);
+          resolve({ status: statusCode, headers: resHeaders, body: Buffer.concat(chunks) });
+        });
+        res.on('error', (e) => { clearTimeout(timer); reject(e); });
+      });
+
+      req.on('error', (e) => { clearTimeout(timer); reject(e); });
+
+      if (body !== undefined && body !== null) req.write(body);
+      req.end();
+    }
+
+    attempt(initialUrl);
+  });
+}
+
 // ── Core proxy logic ───────────────────────────────────────────────────────────
 async function doProxy(req, res, params) {
   if (isRateLimited(clientIp(req))) {
@@ -164,46 +234,41 @@ async function doProxy(req, res, params) {
       ...sanitizeHeaders(headers),
     };
 
-    const fetchInit = {
-      method,
-      headers: reqHeaders,
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-      redirect: 'follow',
-    };
-
+    // Encode body for transport
+    let reqBody;
     if (body !== undefined && body !== null && method !== 'GET' && method !== 'HEAD') {
       const ct = (reqHeaders['content-type'] ?? reqHeaders['Content-Type'] ?? '').toLowerCase();
       if (ct.includes('application/x-www-form-urlencoded')) {
-        fetchInit.body = typeof body === 'string' ? body : new URLSearchParams(body).toString();
+        reqBody = typeof body === 'string' ? body : new URLSearchParams(body).toString();
       } else if (typeof body === 'object') {
-        fetchInit.body = JSON.stringify(body);
+        reqBody = JSON.stringify(body);
         if (!reqHeaders['content-type'] && !reqHeaders['Content-Type']) {
           reqHeaders['content-type'] = 'application/json';
         }
       } else {
-        fetchInit.body = body;
+        reqBody = body;
       }
     }
 
-    // URL is user-supplied by design (CORS proxy). SSRF is mitigated above by
-    // validateUrl(), which blocks private/loopback/link-local address ranges.
-    const upstream = await fetch(targetUrl, fetchInit);
+    const upstream = await upstreamFetch(targetUrl, method, reqHeaders, reqBody);
 
-    for (const h of FORWARD_RES_HEADERS) {
-      const v = upstream.headers.get(h);
-      if (v) res.setHeader(h, v);
+    // Forward all non-hop-by-hop response headers
+    for (const [k, v] of Object.entries(upstream.headers)) {
+      if (!HOP_BY_HOP.has(k.toLowerCase())) res.setHeader(k, v);
     }
     res.setHeader('X-Proxy-Status', 'success');
 
-    const buf = Buffer.from(await upstream.arrayBuffer());
-    res.status(upstream.status).send(buf);
+    res.status(upstream.status).send(upstream.body);
 
   } catch (err) {
     if (res.headersSent) return;
 
-    const isTimeout = err.name === 'TimeoutError' || err.name === 'AbortError';
+    const isTimeout = err.name === 'TimeoutError';
     const status    = err.statusCode ?? (isTimeout ? 504 : 502);
-    const message   = isTimeout ? 'Upstream request timed out.' : (err.message ?? 'Proxy request failed.');
+    const cause     = err.cause instanceof Error ? err.cause.message : null;
+    const message   = isTimeout
+      ? 'Upstream request timed out.'
+      : (cause || err.message || 'Proxy request failed.');
 
     res.status(status).json({
       error: message,
@@ -244,9 +309,9 @@ app.get('/health', (_req, res) => {
 // 404 catch-all
 app.use((_req, res) => {
   res.status(404).json({
-    error:     'Not found.',
+    error:      'Not found.',
     statusCode: 404,
-    usage:     'GET /proxy?url=<encoded-target-url>',
+    usage:      'GET /proxy?url=<encoded-target-url>',
   });
 });
 
