@@ -9,7 +9,7 @@ const app = express();
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const TIMEOUT_MS    = 30_000;
-const MAX_BODY      = '1mb';
+const MAX_BODY      = '10mb';
 const MAX_REDIRECTS = 5;
 const ALLOWED_METHODS = new Set(['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD']);
 const SAFE_PROTOCOLS  = new Set(['http:', 'https:']);
