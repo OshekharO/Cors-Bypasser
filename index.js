@@ -284,10 +284,14 @@ async function doProxy(req, res, params) {
 app.all('/proxy', (req, res) => doProxy(req, res, null));
 
 // RESTful proxy: /proxy/<https://example.com/path> or /proxy/<example.com/path>
+// Vercel (and some reverse proxies) collapse "://" to ":/" in URL paths, so
+// "https://example.com" arrives as "https:/example.com". We normalise any
+// number of slashes after the protocol colon back to exactly two.
 app.all('/proxy/*', (req, res) => {
-  const pathPart = req.params[0];
-  const qs       = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
-  const rawUrl   = /^https?:\/\//i.test(pathPart) ? pathPart + qs : `https://${pathPart}${qs}`;
+  const pathPart   = req.params[0];
+  const qs         = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+  const normalized = pathPart.replace(/^(https?:)\/*/, '$1//');
+  const rawUrl     = /^https?:\/\//i.test(normalized) ? normalized + qs : `https://${pathPart}${qs}`;
 
   doProxy(req, res, {
     url:     rawUrl,
