@@ -185,6 +185,8 @@ async function doProxy(req, res, params) {
       }
     }
 
+    // URL is user-supplied by design (CORS proxy). SSRF is mitigated above by
+    // validateUrl(), which blocks private/loopback/link-local address ranges.
     const upstream = await fetch(targetUrl, fetchInit);
 
     for (const h of FORWARD_RES_HEADERS) {
@@ -249,7 +251,8 @@ app.use((_req, res) => {
 });
 
 // Global error handler
-app.use((err, _req, res, _next) => {
+app.use((err, _req, res, next) => {
+  if (res.headersSent) return next(err);
   res.status(500).json({ error: 'Internal server error.', statusCode: 500 });
 });
 
