@@ -307,6 +307,23 @@ app.all('/proxy/*', (req, res) => {
   });
 });
 
+// Root – welcome / usage
+app.get('/', (_req, res) => {
+  res.json({
+    name:    'CORS Bypasser',
+    status:  'ok',
+    usage: {
+      query_param: 'GET /proxy?url=<encoded-target-url>',
+      path_param:  'GET /proxy/<target-url>',
+      examples: [
+        '/proxy?url=https%3A%2F%2Fexample.com',
+        '/proxy/https://example.com/api/data',
+      ],
+    },
+    health: '/health',
+  });
+});
+
 // Health check
 app.get('/health', (_req, res) => {
   res.json({
