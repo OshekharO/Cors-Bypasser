@@ -141,6 +141,11 @@ function parseRequest(req) {
 // ── Upstream HTTP client (node:http/https for maximum TLS compatibility) ───────
 // Using the built-in http/https modules instead of native fetch avoids strict
 // undici TLS behaviour that rejects servers with incomplete certificate chains.
+// rejectUnauthorized is disabled so the proxy can reach sites whose certificate
+// chains are incomplete (self-signed, missing intermediate CA, etc.). The
+// browser already handles trust for its own connection to this proxy.
+const HTTPS_AGENT = new https.Agent({ rejectUnauthorized: false });
+
 function upstreamFetch(initialUrl, initialMethod, reqHeaders, reqBody) {
   return new Promise((resolve, reject) => {
     let redirectsLeft = MAX_REDIRECTS;
@@ -163,6 +168,7 @@ function upstreamFetch(initialUrl, initialMethod, reqHeaders, reqBody) {
         path     : (urlObj.pathname || '/') + urlObj.search,
         method,
         headers  : reqHeaders,
+        ...(isHttps ? { agent: HTTPS_AGENT } : {}),
       };
 
       const timer = setTimeout(() => {
