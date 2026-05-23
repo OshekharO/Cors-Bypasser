@@ -61,6 +61,16 @@ const corsOptions = {
   exposedHeaders: 'X-Proxy-Status',
   maxAge: 86400,
 };
+
+// Explicitly set CORS headers on all responses
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS,HEAD');
+  res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin');
+  res.header('Access-Control-Expose-Headers', 'X-Proxy-Status');
+  next();
+});
+
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 app.use(express.json({ limit: MAX_BODY }));
