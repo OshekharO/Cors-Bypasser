@@ -8,7 +8,7 @@ A lightweight, secure CORS proxy server that enables cross-origin requests to an
 - **Two Usage Patterns** — query-parameter style and RESTful path style
 - **SSRF Protection** — blocks requests to private / loopback / link-local addresses
 - **Hop-by-hop Header Stripping** — removes headers that must not be forwarded (RFC 7230)
-- **Request Body Size Cap** — 1 MB limit to prevent abuse
+- **Request Body Size Cap** — 10 MB limit to prevent abuse
 - **Request Timeout** — 30-second timeout on all upstream requests
 - **Structured Error Responses** — consistent `{ error, statusCode }` shape
 - **CORS Preflight Caching** — `Access-Control-Max-Age: 86400`
