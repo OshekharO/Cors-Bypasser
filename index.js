@@ -29,28 +29,6 @@ const PRIVATE_RANGES = [
   /^fe80:/i,
 ];
 
-// ── In-memory rate limiter (sliding window per IP) ─────────────────────────────
-const RL_WINDOW_MS = 60_000;
-const RL_MAX       = 60;
-const rlStore      = new Map();
-
-setInterval(() => {
-  const cutoff = Date.now() - RL_WINDOW_MS;
-  for (const [ip, entry] of rlStore) {
-    if (entry.ts < cutoff) rlStore.delete(ip);
-  }
-}, RL_WINDOW_MS).unref();
-
-function isRateLimited(ip) {
-  const now   = Date.now();
-  const entry = rlStore.get(ip) ?? { count: 0, ts: now };
-  if (now - entry.ts > RL_WINDOW_MS) { entry.count = 0; entry.ts = now; }
-  if (entry.count >= RL_MAX) return true;
-  entry.count++;
-  rlStore.set(ip, entry);
-  return false;
-}
-
 // ── Middleware ─────────────────────────────────────────────────────────────────
 app.disable('x-powered-by');
 
@@ -61,15 +39,6 @@ const corsOptions = {
   exposedHeaders: 'X-Proxy-Status',
   maxAge: 86400,
 };
-
-// Explicitly set CORS headers on all responses
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS,HEAD');
-  res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin');
-  res.header('Access-Control-Expose-Headers', 'X-Proxy-Status');
-  next();
-});
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
@@ -228,13 +197,6 @@ function upstreamFetch(initialUrl, initialMethod, reqHeaders, reqBody) {
 
 // ── Core proxy logic ───────────────────────────────────────────────────────────
 async function doProxy(req, res, params) {
-  if (isRateLimited(clientIp(req))) {
-    return res.status(429).json({
-      error: 'Rate limit exceeded. Try again in a minute.',
-      statusCode: 429,
-    });
-  }
-
   const { url: rawUrl, method, headers, body } = params ?? parseRequest(req);
 
   let targetUrl;
