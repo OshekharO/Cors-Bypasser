@@ -62,11 +62,6 @@ function sanitizeHeaders(headers) {
   return out;
 }
 
-function clientIp(req) {
-  return String(req.headers['x-forwarded-for'] ?? req.socket?.remoteAddress ?? '')
-    .split(',')[0].trim();
-}
-
 function httpErr(msg, statusCode) {
   return Object.assign(new Error(msg), { statusCode });
 }
