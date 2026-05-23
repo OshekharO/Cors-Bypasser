@@ -7,9 +7,8 @@ A lightweight, secure CORS proxy server that enables cross-origin requests to an
 - **Full HTTP Method Support** — GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD
 - **Two Usage Patterns** — query-parameter style and RESTful path style
 - **SSRF Protection** — blocks requests to private / loopback / link-local addresses
-- **In-memory Rate Limiting** — 60 requests per IP per minute (sliding window)
 - **Hop-by-hop Header Stripping** — removes headers that must not be forwarded (RFC 7230)
-- **Request Body Size Cap** — 1 MB limit to prevent abuse
+- **Request Body Size Cap** — 10 MB limit to prevent abuse
 - **Request Timeout** — 30-second timeout on all upstream requests
 - **Structured Error Responses** — consistent `{ error, statusCode }` shape
 - **CORS Preflight Caching** — `Access-Control-Max-Age: 86400`
@@ -127,7 +126,6 @@ All errors follow a consistent shape:
 | `403` | Target is a private/internal address (SSRF block) |
 | `404` | Unknown endpoint |
 | `405` | HTTP method not allowed |
-| `429` | Rate limit exceeded (60 req/min per IP) |
 | `502` | Upstream fetch failed |
 | `504` | Upstream request timed out (30 s) |
 
@@ -135,9 +133,8 @@ All errors follow a consistent shape:
 
 1. **Private address blocking** — localhost, 10.x, 172.16–31.x, 192.168.x, 169.254.x, and IPv6 equivalents are all blocked.
 2. **No axios** — removes the SSRF and DoS vulnerabilities present in older axios versions.
-3. **Rate limiting** — per-IP sliding-window limiter with automatic cleanup.
-4. **Body size cap** — rejects payloads over 1 MB.
-5. For public production deployments, consider adding authentication and domain allow-listing.
+3. **Body size cap** — rejects payloads over 1 MB.
+4. For public production deployments, consider adding authentication and domain allow-listing.
 
 ## 💡 Axios Client Example
 
@@ -162,7 +159,6 @@ const posts = await proxy('https://jsonplaceholder.typicode.com/posts');
 | `504 Upstream request timed out` | Target server is slow or unreachable |
 | `403 private address` | The target URL resolves to an internal IP |
 | `400 Invalid URL` | Include the protocol: `https://example.com` |
-| `429 Rate limit` | Slow down — max 60 requests per minute per IP |
 
 ## 🤝 Contributing
 
@@ -174,4 +170,4 @@ const posts = await proxy('https://jsonplaceholder.typicode.com/posts');
 
 ---
 
-**Note**: This proxy is intended for development and moderate-traffic use. For high-traffic production deployments, add persistent rate limiting (e.g. Redis-backed), a WAF, and domain allow-listing.
+**Note**: This proxy is intended for development and moderate-traffic use. For high-traffic production deployments, add a WAF, domain allow-listing, and consider implementing a persistent rate limiting system (e.g. Redis-backed).
