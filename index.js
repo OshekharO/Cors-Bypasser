@@ -118,7 +118,11 @@ function parseRequest(req) {
 // rejectUnauthorized is disabled so the proxy can reach sites whose certificate
 // chains are incomplete (self-signed, missing intermediate CA, etc.). The
 // browser already handles trust for its own connection to this proxy.
-const HTTPS_AGENT = new https.Agent({ rejectUnauthorized: false });
+// ⚡ Bolt Optimization: Enable connection pooling via keepAlive: true.
+// Reusing TCP & TLS connections for subsequent upstream requests saves 50–200ms+
+// per request by avoiding full TCP handshakes and TLS negotiation.
+const HTTP_AGENT  = new http.Agent({ keepAlive: true });
+const HTTPS_AGENT = new https.Agent({ rejectUnauthorized: false, keepAlive: true });
 
 function upstreamFetch(initialUrl, initialMethod, reqHeaders, reqBody) {
   return new Promise((resolve, reject) => {
@@ -142,7 +146,7 @@ function upstreamFetch(initialUrl, initialMethod, reqHeaders, reqBody) {
         path     : (urlObj.pathname || '/') + urlObj.search,
         method,
         headers  : reqHeaders,
-        ...(isHttps ? { agent: HTTPS_AGENT } : {}),
+        agent    : isHttps ? HTTPS_AGENT : HTTP_AGENT,
       };
 
       const timer = setTimeout(() => {
