@@ -43,6 +43,12 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 app.use(express.json({ limit: MAX_BODY }));
+app.use((err, _req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).json({ error: 'Invalid JSON payload in request body.', statusCode: 400 });
+  }
+  next(err);
+});
 app.use(express.urlencoded({ extended: false, limit: MAX_BODY }));
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -80,7 +86,26 @@ function validateUrl(raw) {
     throw httpErr(`Unsupported protocol "${u.protocol}". Only http and https are supported.`, 400);
   }
 
-  if (PRIVATE_RANGES.some(re => re.test(u.hostname))) {
+  const rawHost = u.hostname.replace(/^\[|\]$/g, '');
+  let cleanHost = rawHost;
+
+  if (/^::ffff:/i.test(rawHost)) {
+    const rest = rawHost.slice(7);
+    if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(rest)) {
+      cleanHost = rest;
+    } else {
+      const parts = rest.split(':');
+      if (parts.length === 2) {
+        const p1 = parseInt(parts[0], 16);
+        const p2 = parseInt(parts[1], 16);
+        if (!isNaN(p1) && !isNaN(p2)) {
+          cleanHost = `${(p1 >> 8) & 255}.${p1 & 255}.${(p2 >> 8) & 255}.${p2 & 255}`;
+        }
+      }
+    }
+  }
+
+  if (PRIVATE_RANGES.some(re => re.test(rawHost) || re.test(cleanHost))) {
     throw httpErr('Requests to private or internal network addresses are not allowed.', 403);
   }
 
@@ -149,7 +174,9 @@ function upstreamFetch(initialUrl, initialMethod, reqHeaders, reqBody) {
         agent    : isHttps ? HTTPS_AGENT : HTTP_AGENT,
       };
 
+      let timedOut = false;
       const timer = setTimeout(() => {
+        timedOut = true;
         req.destroy();
         const e = new Error('Upstream request timed out.');
         e.name  = 'TimeoutError';
@@ -171,7 +198,13 @@ function upstreamFetch(initialUrl, initialMethod, reqHeaders, reqBody) {
             method = 'GET';
             body   = undefined;
           }
-          attempt(new URL(resHeaders.location, validUrl).href);
+          let redirectUrl;
+          try {
+            redirectUrl = new URL(resHeaders.location, validUrl).href;
+          } catch (e) {
+            return reject(httpErr(`Invalid redirect URL: "${resHeaders.location}"`, 502));
+          }
+          attempt(redirectUrl);
           return;
         }
 
@@ -181,10 +214,16 @@ function upstreamFetch(initialUrl, initialMethod, reqHeaders, reqBody) {
           clearTimeout(timer);
           resolve({ status: statusCode, headers: resHeaders, body: Buffer.concat(chunks) });
         });
-        res.on('error', (e) => { clearTimeout(timer); reject(e); });
+        res.on('error', (e) => {
+          clearTimeout(timer);
+          if (!timedOut) reject(e);
+        });
       });
 
-      req.on('error', (e) => { clearTimeout(timer); reject(e); });
+      req.on('error', (e) => {
+        clearTimeout(timer);
+        if (!timedOut) reject(e);
+      });
 
       if (body !== undefined && body !== null) req.write(body);
       req.end();
@@ -229,9 +268,13 @@ async function doProxy(req, res, params) {
 
     const upstream = await upstreamFetch(targetUrl, method, reqHeaders, reqBody);
 
-    // Forward all non-hop-by-hop response headers
+    // Forward all non-hop-by-hop response headers, stripping upstream CORS headers
+    // so they do not conflict with or override the proxy's CORS headers.
     for (const [k, v] of Object.entries(upstream.headers)) {
-      if (!HOP_BY_HOP.has(k.toLowerCase())) res.setHeader(k, v);
+      const lower = k.toLowerCase();
+      if (!HOP_BY_HOP.has(lower) && !lower.startsWith('access-control-')) {
+        res.setHeader(k, v);
+      }
     }
     res.setHeader('X-Proxy-Status', 'success');
 
@@ -320,7 +363,9 @@ app.use((err, _req, res, next) => {
 });
 
 // ── Start ──────────────────────────────────────────────────────────────────────
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`CORS proxy listening on port ${PORT}`));
+if (require.main === module) {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => console.log(`CORS proxy listening on port ${PORT}`));
+}
 
 module.exports = app;
